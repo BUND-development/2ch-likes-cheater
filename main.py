@@ -61,7 +61,14 @@ params["num"] = POST
 URL = "https://2ch.hk/makaba/likes.fcgi"
 
 
-class Stats:
+def print_st(st):
+    print("==============================\n")
+    print(colored("Отправлено: {0}".format(str(Stats2["good"])), "green"))
+    print(colored("Отклонено: {0}".format(str(Stats2["denied"])), "red"))
+    print(colored("Не получено ответа: {0}".format(str(Stats2["bad"])), "red"))
+
+
+class Stats:  # пока отложил, из-за мультипотока не работает
     def __init__(self):
         self.success = 0
         self.denied = 0
@@ -149,15 +156,12 @@ def answ_anal(answ):
     # в зависимости от ответа выводит сообщение и собирает стату
     if answ["Error"] == None:
         print(colored("Отправлено успешно!", "green"))
-        stats.add_success()
     elif answ["Error"] == -4:
         print(colored("Ошибка: с этой прокси уже лайкали!", "red"))
-        stats.add_denied()
     elif answ["Error"] == -8:
         pass  # это ошибка, когда одна и та же прокся используется подряд. костыль, да
     elif answ["Error"] == -1337:
         print(colored("Ошибка: не удалось получить ответ сервера!", "red"))
-        stats.add_bad()
     else:
         print(colored(("Неизвестная ошибка> " + str(answ)), "red"))
     if PRINTALL:
@@ -214,7 +218,6 @@ def get_instructions(obj):
 
 # запуск скрипта
 def main(proxy):
-    print(proxy)
     if NOTFORCETHREADS:
         for i in proxy:
             if PRINTALL:  # иф дебаггера, см. README
@@ -248,11 +251,9 @@ def main(proxy):
             # анализ ответа
             answ_anal(answer)
 
-
-
+            
 if __name__ == "__main__":
     print(colored("Скрипт запущен! Загрузка потоков...", "green"))
-    stats = Stats()  # инициализация статистики
 
     if THREADS > len(proxies) and NOTFORCETHREADS:  # если потоков больше, чем проксей - то урезаем потоки.
         THREADS = len(proxies)
@@ -272,6 +273,4 @@ if __name__ == "__main__":
             instr = None
         proc = Process(target=main, args=(instr,))
         proc.start()
-
     print('Все потоки запущены')
-    stats.print_stats()
