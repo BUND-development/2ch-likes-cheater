@@ -6,7 +6,7 @@
 ver. 1.7
 ### Что нужно для установки?
 1. нужен питон версии 3.x и выше
-2. так же pip install requests requests[socks4] urllib3 colored
+2. так же pip install requests requests[socks4] urllib3 termcolor
 
 ### Как стартовать?  
 `python main.py [доска] [пост] [протокол проксей] [0 - лайк, 1 - дизлайк] [потоки, желательно не больше, чем количество проксей/2]`  
