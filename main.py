@@ -3,13 +3,15 @@
 try:
     import sys
     import json
-    import requests
+    from requests import get as _get
+    from requests import exceptions
     import urllib3
     import threading
     from threading import Thread
     from multiprocessing import Process
     from multiprocessing import Pool
     from termcolor import colored
+    import backoff
 except:
     print("Не были установлены все либы, см. README.txt")
     exit(1)
@@ -141,7 +143,8 @@ class Send:
     # отправка гет запроса с использованием одной прокси и получения ответа в формате json`а
     def sending(self):
         try:
-            answ = json.loads(requests.get(URL, params=self.params, proxies=self.proxies, timeout=TIMEOUT, headers=self.headers, verify=False).text)
+            req = backoff.on_exception(backoff.expo, exceptions.ConnectionError, max_tries = 10, jitter = None, max_time = 60)(_get)
+            answ = json.loads(req(URL, params=self.params, proxies=self.proxies, timeout=TIMEOUT, headers=self.headers, verify=False).text)
         except:
             answ = {"Error": -1337}  # в случае если превысило таймаут - присваиваю ошибку соединения
         return answ
