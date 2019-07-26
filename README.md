@@ -3,10 +3,10 @@
 
 
 Лайкает ("двачует") посты на сосаче  
-ver. 1.7
+ver. 1.8
 ### Что нужно для установки?
 1. нужен питон версии 3.x и выше
-2. так же pip install requests requests[socks4] urllib3 termcolor
+2. так же pip install requests pyscocks urllib3 termcolor backoff
 
 ### Как стартовать?  
 `python main.py [доска] [пост] [протокол проксей] [0 - лайк, 1 - дизлайк] [потоки, желательно не больше, чем количество проксей/2]`  
