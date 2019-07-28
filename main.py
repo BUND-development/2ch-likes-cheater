@@ -12,8 +12,11 @@ try:
     from multiprocessing import Pool
     from termcolor import colored
     import backoff
+    from colorama import init, Fore, Back, Style
+    init(convert=True)
+
 except:
-    print("Не были установлены все либы, см. README.txt")
+    print(Fore.RED + "Не были установлены все либы, см. README.txt")
     exit(1)
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # отключение уведомлений об незащищенности соединения через прокси
@@ -28,7 +31,7 @@ try:
         TASK = 'dislike'
     THREADS = int(sys.argv[5])  # потоки
 except IndexError:
-    print("Отсутствуют аргументы")
+    print(Fore.RED + "Отсутствуют аргументы")
     exit(1)
 
 
@@ -85,12 +88,12 @@ class Stats:  # пока отложил, из-за мультипотока не
         self.all += 1
 
     def print_stats(self):
-        print("\n======================================================")
-        print("Всего отправок: {0}".format(self.all))
-        print("Всего успешных: {0}".format(self.success))
-        print("Всего отклонено: {0}".format(self.denied))
-        print("Всего не удалось отправить: {0}".format(self.bad))
-        print("======================================================\n")
+        print(Fore.GREEN + "\n======================================================")
+        print(Fore.CYAN + "Всего отправок: {0}".format(self.all))
+        print(Fore.CYAN + "Всего успешных: {0}".format(self.success))
+        print(Fore.CYAN + "Всего отклонено: {0}".format(self.denied))
+        print(Fore.CYAN + "Всего не удалось отправить: {0}".format(self.bad))
+        print(Fore.GREEN + "======================================================\n")
 
     def get_success(self):
         return self.success
@@ -154,15 +157,15 @@ class Send:
 def answ_anal(answ):
     # в зависимости от ответа выводит сообщение и собирает стату
     if answ["Error"] == None:
-        print(colored("Отправлено успешно!", "green"))
+        print(Fore.GREEN + "Отправлено успешно!")
     elif answ["Error"] == -4:
-        print(colored("Ошибка: с этой прокси уже лайкали!", "red"))
+        print(Fore.YELLOW + "Ошибка: с этой прокси уже лайкали!")
     elif answ["Error"] == -8:
         pass  # это ошибка, когда одна и та же прокся используется подряд. костыль, да
     elif answ["Error"] == -1337:
-        print(colored("Ошибка: не удалось получить ответ сервера!", "red"))
+        print(Fore.RED + "Ошибка: не удалось получить ответ сервера!")
     else:
-        print(colored(("Неизвестная ошибка> " + str(answ)), "red"))
+        print(Fore.GREEN + "Неизвестная ошибка> " + str(answ))
     if PRINTALL:
         print(answ)
     if HOWMANYLIKES and answ["Error"]==None:
