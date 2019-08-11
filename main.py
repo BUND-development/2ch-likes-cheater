@@ -1,21 +1,18 @@
 # -*- coding: utf-8 -*-
 
-
 import os
 # функция очистки экрана
 def cls():
-    os.system('cls' if os.name=='nt' else 'clear')
+    os.system('cls' if os.name=='nt' else 'clear')  # очистка командной строки
 
 
 # автоматическая установка всех либ для линупсов и шинды
 try:
-    if os.name != "nt": print("Данной программе может потребоваться исполнение sudo! Если вы против, то завершите ее ctrl+c. Продолжить нажмите Enter")
-    input()
-    os.system("pip install requests pysocks urllib3 termcolor backoff" if os.name=="nt" else "sudo pip3 install requests pysocks urllib3 termcolor backoff")
+    os.system("pip install requests pysocks urllib3 backoff colorama" if os.name=="nt" else "pip3 install --user requests pysocks urllib3 backoff colorama")
 except:
     pass
 finally:
-    cls()
+    cls()   # очистка командной строки
 
 
 try:
@@ -24,141 +21,70 @@ try:
     from requests import get as _get
     from requests import exceptions
     import urllib3
-    import threading
-    from threading import Thread
     from multiprocessing import Process
-    from multiprocessing import Pool
-    from termcolor import colored
     import backoff
-    from colorama import init, Fore, Back, Style
-    init(convert=True)
-
+    from abc import ABC, abstractmethod
+    import colorama
+    colorama.init()
+    # ----
+    import threading
 except:
-    print(Fore.RED + "Ошибка библиотек! Попробуйте выполнить установку вручную!")
+    print("Ошибка загрузки модулей! см. README.md")
     exit(1)
-
-
-
-
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)  # отключение уведомлений об незащищенности соединения через прокси
 
-try:
-    BOARD = str(sys.argv[1])  # доска
-    POST = str(sys.argv[2])  # пост
-    PROTOCOL = str(sys.argv[3])  # протокол прокси
-    if sys.argv[4] == '0':  # если четвертый аргумент 0 - то накручивает лайки, если не равно 0 - дизлайки
-        TASK = 'like'
+
+def coloring(string, color):
+    if color == "red":
+        string = "\x1b[31m" + string + "\x1b[0m"
+    elif color == "green":
+        string = "\x1b[32m" + string + "\x1b[0m"
+    elif color == "yellow":
+        string = "\x1b[33m" + string + "\x1b[0m"
+    elif color == "blue":
+        string = "\x1b[34m" + string + "\x1b[0m"
     else:
-        TASK = 'dislike'
-    THREADS = int(sys.argv[5])  # потоки
-except IndexError:
-    print(Fore.RED + "Отсутствуют аргументы")
-    exit(14)
+        pass
+    if os.name == "nt"
+        string = string + "\n"
+    return string
 
 
-FILE = 'proxies.txt'  # имя файла с проксями
-# =========================================================================================
-REPORT = "report.json"  # на данным момент файл, который создастся в случае ошибки оптимизации №12 (см. разбор ошибок)
-# =========================================================================================
-ISPROTOCOLINCLUDE = False  # прокси в формате протокол://прокси, ДА или НЕТ
-# =========================================================================================
-TIMEOUT = (15, 25)  # первый таймаут коннекта до сервера, второй ожидания ответа от сервера.
-# можно поставить второй таймаут на 1 чтобы ускорить работу. но тогда нельзя будет узнать ответ от сервера и
-# не будет работать ограничение на отправленные лайки
-# =========================================================================================
-PRINTALL = False  # выводить ответы сервера и дебаг-ответы
-# =========================================================================================
-HOWMANYLIKES = 0  # сколько накрутить лайков. Если больше 0 - то число потоков автоматически становится 1.
-# =========================================================================================
-HOWMANYALLOW = 5  # +- в каком диапазоне может скрипт изменять потоки для оптимизации
-# не советую менять без понимания кода
-# =========================================================================================
-MINTHREADSALLOW = 10  # минимальное количество потоков, ниже которого не будет включаться оптимизация
-# должно быть больше HOWMANYALLOW, иначе большая вероятность сломать скрипт
-# =========================================================================================
-MAXTRIES = 5  # количество попыток отправки лайка с каждой прокси
-# =========================================================================================
-# разбор ошибок:
-# 12 - критическая ошибка оптимизации потоков, писать нам на почту BUND-development@protonmail.com
-# 14 - не все аргументы введены
+class Data(ABC):
+    '''Абстрактный класс с данными'''
 
-
-if HOWMANYLIKES:
-    print(colored("Режим лимита лайков, скрипт работает в одном потоке!", "green"))
-    THREADS = 1
-
-
-# параметры отправки лайка
-params = {}
-params["task"] = TASK
-params["board"] = BOARD
-params["num"] = POST
-URL = "https://2ch.hk/makaba/likes.fcgi"
-
-
-class Stats:  # пока отложил, из-за мультипотока не работает
     def __init__(self):
-        self.success = 0
-        self.denied = 0
-        self.bad = 0
-        self.all = 0
-
-    def add_bad(self):  # счетчик проксей, которые не получили ответ от сервера
-        self.bad += 1
-        self.all += 1
-
-    def add_success(self):  # счетчик точно поставленных лайков/дизлайков
-        self.success += 1
-        self.all += 1
-
-    def add_denied(self):  # счетчик проксей, которые получили ответ, но лайк не был принят по каким-то причинам
-        self.denied += 1
-        self.all += 1
-
-    def print_stats(self):
-        print(Fore.GREEN + "\n======================================================")
-        print(Fore.CYAN + "Всего отправок: {0}".format(self.all))
-        print(Fore.CYAN + "Всего успешных: {0}".format(self.success))
-        print(Fore.CYAN + "Всего отклонено: {0}".format(self.denied))
-        print(Fore.CYAN + "Всего не удалось отправить: {0}".format(self.bad))
-        print(Fore.GREEN + "======================================================\n")
-
-    def get_success(self):
-        return self.success
-
-
-# обработка прокси в словарь для requests
-def initial_proxy():
-    # чтение из файла проксей
-    file = open(FILE, mode="r").read()
-    # разделение прокси листа на сами прокси
-    proxy = file.split('\n')
-    # удаляем пустую строку, если есть
-    try:
-        proxy.remove('')
-    except ValueError:
-        pass
-    # если не проставлены протоколы в proxies.txt, то мы их добавляем
-    if not ISPROTOCOLINCLUDE:
-        for i in range(0, len(proxy)):
-            proxy[i] = PROTOCOL + '://' + proxy[i]
-    else:
-        pass
-    # возвращаем список проксей в формате протокол://прокси:порт
-    return proxy
-
-
-# отправка лайка
-class Send:
-    def __init__(self, proxy, protocol, post, parametrs):
-        self.protocol = protocol
-        self.proxy = proxy
-        # создание словаря с одной проксей
-        self.proxies = {}
-        self.proxies['https'] = self.proxy
-        self.post = post
-        self.params = parametrs
+        # =========================================================================================
+        self.FILE = 'proxies.txt'  # имя файла с проксями
+        # =========================================================================================
+        self.REPORT = "report.json"  # пока не нужно
+        # =========================================================================================
+        self.URL = "https://5.61.239.35/makaba/likes.fcgi"  # айпи сервера сосача
+        # =========================================================================================
+        self.ISPROTOCOLINCLUDE = False  # прокси в формате протокол://прокси, ДА или НЕТ
+        # =========================================================================================
+        self.TIMEOUT = (15, 20)  
+        '''
+        Первая цифра - таймаут ожидания коннекта до сервера, второй таймаут ожидания ответа
+        можно поставить вторую цифру на 1 чтобы ускорить максимально скрипт, но тогда нельзя будет
+        подтвердить успешную отправку
+        '''
+        # =========================================================================================
+        self.PRINTALL = False  # пока не нужно
+        # =========================================================================================
+        self.HOWMANYLIKES = 0  # Лимит на количество лайков. При изменении на любое число ставит 1 поток
+        # =========================================================================================
+        self.HOWMANYALLOW = 5  # +- в каком диапазоне может скрипт изменять потоки для оптимизации
+        # не советую менять без понимания кода
+        # =========================================================================================
+        self.MINTHREADSALLOW = 10  # минимальное количество потоков, ниже которого не будет включаться оптимизация
+        # должно быть больше HOWMANYALLOW, иначе большая вероятность сломать скрипт
+        # =========================================================================================
+        self.MAXTRIES = 3  # количество попыток отправки лайка с каждой прокси
+        # =========================================================================================
+        self.NORMALINPUT = False  # использовать аргументы командной строки
+        # =========================================================================================
         # заголовки
         self.headers = {}
         self.headers["Host"] = "2ch.hk"
@@ -172,139 +98,196 @@ class Send:
         self.headers["UPGRADE-INSECURE-REQUESTS"] = "1"
         self.headers["DNT"] = "1"
 
-    # отправка гет запроса с использованием одной прокси и получения ответа в формате json`а
-    def sending(self):
-        try:
-            req = backoff.on_exception(backoff.expo, exceptions.ConnectionError, max_tries = MAXTRIES, jitter = None, max_time = 60)(_get)
-            answ = json.loads(req(URL, params=self.params, proxies=self.proxies, timeout=TIMEOUT, headers=self.headers, verify=False).text)
-        except:
-            answ = {"Error": -1337}  # в случае если прокся сдохла - присваиваю ошибку соединения
-        return answ
 
 
-# анализ ответа и удаление прокси из списка
-def answ_anal(answ):
-    # в зависимости от ответа выводит сообщение и собирает стату
-    if answ["Error"] == None:
-        print(Fore.GREEN + "Отправлено успешно!")
-    elif answ["Error"] == -4:
-        print(Fore.YELLOW + "Ошибка: с этой прокси уже лайкали!")
-    elif answ["Error"] == -8:
-        pass  # это ошибка, когда попадается одини тот же айпи
-    elif answ["Error"] == -1337:
-        print(Fore.RED + "Ошибка: не удалось получить ответ сервера!")
-    else:
-        print(Fore.GREEN + "Неизвестная ошибка> " + str(answ))
-    if PRINTALL:
-        print(answ)
-    if HOWMANYLIKES and answ["Error"]==None:
-        return 1
-    elif HOWMANYLIKES:
-        return 0
+class Proxies(Data):
+    '''Класс работы с проксями'''
+    
+    def __init__(self):
+        super().__init__()
+        self.proxies_list = []  # список с проксями
 
-
-proxies = initial_proxy()  # получаю список проксей из файла FILE
-howmany = 0  # переменная количества выдач проксей
-
-
-# оптимизация потоков
-def optim(pr_amount, streams, value):
-    if pr_amount % streams:  # оптимизация
-        for i in range(streams - value, streams + value + 1):
-            if pr_amount % i == 0:  # проверка, подходит ли i значение потоков как четный делитель количества проксей
-                streams = i
-                print("Потоки скорректированны до {0}".format(str(streams)))
-                return streams
-            else:
-                continue
-        return streams
-    else:
-        return streams
-
-
-def thinking():
-    global THREADS
-    if THREADS <= MINTHREADSALLOW:
-        return len(proxies) // THREADS
-    THREADS = optim(len(proxies), THREADS, HOWMANYALLOW)
-    ret = len(proxies) // THREADS
-    return ret
-
-
-if PRINTALL:
-    print("Длина прокси-листа: " + str(len(proxies)))
-
-# получение информации о количестве проксей и рассчет пркосей для каждого независимого потока
-def get_instructions(obj):
-    global howmany
-    howmany += 1  # счетчик сколько раз была использована функция, нужно для расчета потоков
-    global proxies
-
-    if PRINTALL:
-        print(len(proxies))
-        print("Запущена функция выдачи массивов проксей")
-
-    if howmany > THREADS:  # заполнение последнего добивающего прокси потока
-        ret = proxies
-        if PRINTALL:
-            print("Последний заполняющий поток")
-            print(ret)
-        proxies.clear()
-        return ret
-
-    elif obj:
-        ret = proxies[0:obj]  # извлечение среза из общего списка проксей
-        del proxies[0:obj]  # удаление среза из общего списка проксей
-        return ret  # возвращение расчитанной дозы проксей
-    # дополнительная ошибка
-
-    else:
-        print('Критическая ошибка! Просьба отправить report.txt на BUND-development@protonmail.com')
-        with open(REPORT, "w") as write_file:
-            # создание файла репорта
-            report = "Протокол проксей: {0}, потоки: {1}, количество проксей: {2}, сколько разрешено редактировать {3}, минимальное количество потоков: {4}"
-            report = report.format( str(PROTOCOL), str(THREADS), str(len(proxies)), str(HOWMANYALLOW), str(MINTHREADSALLOW) )
-            json.dump(report, write_file)
-        exit(12)
-
-
-# запуск скрипта
-def main(proxy):
-    if HOWMANYLIKES:  # локальная переменная успешных отправок
-        stats = 0
-    for i in proxy:
-        if PRINTALL:  # иф дебаггера, см. README
-            print("Прокся {0} заюзана".format(i))
-            if HOWMANYLIKES: print("Пролайкано {0} раз".format(str(stats)))
-
-        elif HOWMANYLIKES > 0 and stats >= HOWMANYLIKES:  # проверка количества успешных отправок для прокси, см README
-            print(colored("Лимит лайков достигнут успешно, выключение...", "green"))
-            break
-        # инициализация класса для прокси
-        send = Send(i, PROTOCOL, POST, params)
-        # отправка лайка
-        answer = send.sending()
-        # анализ ответа
-        if HOWMANYLIKES:
-            stats += answ_anal(answer)
+    def get_proxies_from_txt(self):
+        '''Получение списка проксей из FILE'''
+        with open(self.FILE, mode='r') as file:  # безопасное открытие файла
+            self.proxies_list = file.read().split("\n")  # чтение файла и разделение полученной строки.
+            try:
+                self.proxies_list.remove('')  # удаление пустого элемента строки из массива, если он есть
+            except ValueError:
+                pass
+        if not self.ISPROTOCOLINCLUDE:  # если протокол не вписан в файле
+            for i in range(0, len(self.proxies_list)):
+                self.proxies_list[i] = self.PROTOCOL + '://' + self.proxies_list[i]  # заменям прокси формата 0.0.0.0 на протокол://0.0.0.0
         else:
-            answ_anal(answer)
+            pass
+
+
+
+class Optimisation(Data):
+    '''Класс оптимизации потоков'''
+    
+    def __init__(self):
+        self.coef = None  # сколько выдавать проксей 
+        super().__init__()
+
+    def optim(self):
+        '''Оптимизация потоков, ничего не менял с прошлой версии'''
+        
+        if len(self.proxies_list) % self.THREADS and self.THREADS >= self.MINTHREADSALLOW:
+            if self.THREADS > len(self.proxies_list):  # если потоков больше, чем проксей
+                self.THREADS = len(self.proxies_list) // 2
+            for variable in range(self.THREADS - self.HOWMANYALLOW, self.THREADS + self.HOWMANYALLOW + 1):
+                if len(self.proxies_list) % self.THREADS:
+                    continue
+                else:
+                    self.THREADS = variable
+                    print("Потоки скорректированы до {0}!".format(str(variable)),)
+        else:
+            print("Потоков меньше, чем разрешено изменять. Использование без изменений...")
+
+    def setting_coef(self):
+        self.coef = len(self.proxies_list) // self.THREADS  # получение количества проксей на 1 поток
+        if len(self.proxies_list) % self.THREADS:  # если прокси в списке делятся с остатком на потоки
+            self.THREADS += 1  # добавление замыкающего потока для сброса остатков проксей
+        else:
+            pass
+
+
+
+class Getting(Data):
+    '''Класс получения проксей и вводимых данных'''
+    
+    def __init__(self):
+        self.params = {}  # параметры запроса
+        self.PROTOCOL = None  # перменная протокола
+        self.THREADS = None  # переменная потоков
+        super().__init__()
+
+    def get_part_proxies(self):
+        '''Выдача среза из списка проксей в зависимости от coef'''
+        if len(self.proxies_list) <= self.coef:  # если это последняя партия проксей
+            pack_of_proxy = self.proxies_list  # копирование остатка списка
+            #self.proxies_list.clear()  # очистка списка, нужно для кореектного деббагинга
+            return pack_of_proxy
+        else:
+            pack_of_proxy = self.proxies_list[0:self.coef]  # получение среза проксей для потока
+            del self.proxies_list[0:self.coef]  # удаление среза
+            return pack_of_proxy
+    
+    def get_data(self):
+        '''Получение данных'''
+        if self.NORMALINPUT:  # если ввод из аргументов командной строки
+            self.params = {
+            "task": None,
+            "board": sys.argv[1],
+            "num": sys.argv[2],
+            }
+            if sys.argv[4]:
+                self.params["task"] = "dislike"
+            else:
+                self.params["task"] = "like"
+            self.PROTOCOL = sys.argv[3]
+            self.THREADS = int(sys.argv[5])
+        else:  # если ввод через input
+            self.params = {
+            "task": input(coloring("Двачую или рейдж (like/dislike)> ", "white")),
+            "board": input(coloring("Введите доску> ", "white")),
+            "num": input(coloring("Введите пост> ", "white")),
+            }
+            self.PROTOCOL = input(coloring("Введите протокол (http/socks4/socks5)> ", "white"))
+            self.THREADS = int(input(coloring("Введите потоки> ", "white")))
+
+        if self.HOWMANYLIKES:
+            print(coloring("Форсирование на 1 поток!", "yellow"))
+            self.THREADS = 1
+
+
+
+class Posting(Data):
+    '''Класс отправки'''
+    
+    def __init__(self):
+        super().__init__()
+    
+    def sending(self, proxy):
+        # одиночный словарь с проксей
+        self.proxies = {"https": proxy}
+        self.answer = {"Error": "NoName"}
+        try:
+            # создание запроса с обработкой исключений с помощью backoff
+            req = backoff.on_exception(backoff.expo, exceptions.ConnectionError, max_tries = self.MAXTRIES, jitter = None, max_time = 30)(_get)
+            # отправка самого лайка
+            self.answer = json.loads(req(self.URL, params=self.params, proxies=self.proxies, timeout=self.TIMEOUT, headers=self.headers, verify=False).text)
+        except KeyboardInterrupt:
+            print(coloring("Выключение...", "yellow"))
+            self.answer = {"Error": -8}
+            self.exit = True
+        except:
+            self.answer = {"Error": -1337}  # если не удалось отправить, то присваиеваем ошибку 
+        Posting.answer_analising(self, self.answer)  # просто анализ ответа и вывод
+    
+    def answer_analising(self, answer):
+        # в зависимости от ответа выводит сообщение и собирает стату
+        if answer["Error"] == None:
+            print(coloring("Отправлено успешно!", "green"))
+            if self.HOWMANYLIKES:
+                self.cheker += 1
+        elif answer["Error"] == -4:
+            print(coloring("Ошибка: с этой прокси уже лайкали!", "yellow"))
+        elif answer["Error"] == -8:
+            pass  # это ошибка, когда попадается одини тот же айпи
+        elif answer["Error"] == -1337:
+            print(coloring("Ошибка: не удалось получить ответ сервера!", "red"))
+        else:
+            print(coloring("Неизвестная ошибка> " + str(answer["Error"]), "red"))
+
+    def start_sending(self, list):
+        if self.HOWMANYLIKES:
+            self.cheker = 0
+        for i in list:
+            if self.exit:
+                print(coloring("Поток обнаружил запрос на выключение...", "yellow"))
+                break
+            elif self.HOWMANYLIKES and self.cheker >= self.HOWMANYLIKES:
+                print(coloring("Достигнут лимит лайков! Выключение...", "yellow"))
+                break
+            Posting.sending(self, i)  # запуск метода отправки
+
+
+
+class Main(Optimisation, Getting, Posting, Proxies):
+    '''Основной класс для запуска остального кода'''
+    
+    def __init__(self):
+        self.exit = False
+        super().__init__()
+    
+
+
+    def main_main(self):
+        '''Запускающий метод'''
+        Main.get_data(self)  # получение входящих данных
+        Main.get_proxies_from_txt(self)  # загружаем и обрабатываем прокси
+        Main.optim(self)  # оптимизируем потоки
+        Main.setting_coef(self)  # получение коэфецента выдачи проксей на один поток
+        for j in range(0, self.THREADS):  # магия многопотока
+            instr = Main.get_part_proxies(self)
+            proc = threading.Thread(target=Main.start_sending, args=(self, instr))  # многопоток под мультиплатформу
+            #proc = Process(target=Main.start_sending, args=(self, instr))  # многопоток для линуксоидов
+            proc.start()
+        print(coloring("Все потоки запущены!", "green"))
+        
+        while False:  # заготовка на будущее
+            past_input = input("")
+            if past_input == "q":
+                self.exit = True
+                print("Выключение...")
+            else:
+                print("Неизвестная команда!")
+                continue
+
 
 
 if __name__ == "__main__":
-    print(colored("Скрипт запущен! Загрузка потоков...", "green"))
-
-    if THREADS > len(proxies):  # если потоков больше, чем проксей - то урезаем потоки.
-        THREADS = len(proxies)
-    obj = thinking()  # анализ потоков
-    if len(proxies) % THREADS:
-        threads_new = THREADS + 1
-    else:
-        threads_new = THREADS
-
-
-    for jj in range(0, threads_new):
-        instr = get_instructions(obj)
-        proc = Process(target=main, args=(instr,))
-        proc.start()
-    print('Все потоки запущены!')
+    starting = Main()  # инициация основного класса
+    starting.main_main()  # запуск основного метода основного класса
