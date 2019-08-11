@@ -46,7 +46,7 @@ def coloring(string, color):
         string = "\x1b[34m" + string + "\x1b[0m"
     else:
         pass
-    if os.name == "nt"
+    if os.name == "nt":
         string = string + "\n"
     return string
 
